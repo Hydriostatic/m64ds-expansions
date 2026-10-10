@@ -8,6 +8,7 @@ na tela de baixo, lendo a memória do jogo enquanto você joga.
 
 | Jogo | Pasta | O que a tela de baixo mostra |
 |---|---|---|
+| Banjo-Tooie (USA) — v1.0 | [`banjotooie/`](banjotooie/) | página estilo Nintendo DS: mundo atual, coletáveis do mundo, ovos e penas |
 | Kirby 64: The Crystal Shards (USA) — v1.6 | [`kirby64/`](kirby64/) | HUD da fase, menus, quadro de cristais por save, mini-games com placar ao vivo |
 
 ## Por que não tem `.exp` pronto aqui
@@ -18,6 +19,7 @@ então não fica neste repositório. Cada pasta tem um script que monta o `.exp`
 ```
 pip install pillow
 python3 kirby64/make_kirby64.py "Kirby 64 - The Crystal Shards (USA).z64" kirby64.exp
+python3 banjotooie/make_banjotooie.py "Banjo-Tooie (USA).z64" banjotooie.exp
 ```
 
 ## Instalar no emulador
