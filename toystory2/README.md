@@ -21,6 +21,7 @@ Tela de 248×216 ampliada 5× (1240×1080 no AYN Thor), sem suavizar.
 | Cabeçalho | nome da fase na fonte de menu do jogo (duas linhas nos nomes longos), número da fase e o token girando |
 | Status | vidas, bateria (14 segmentos) e moedas de 50, com a moeda girando |
 | Cartões | os 5 tokens da fase: moedas do Hamm, a missão da fase (ovelhas, soldados, Little Tikes…), desafio, chefe e segredo, com os ícones do próprio jogo (sem texto); embaixo de cada um, o token fica escuro e parado até ser pego e depois gira; nas fases de chefe, um cartão de chefe com o token |
+| Fora das fases | uma página para cada imagem da tela de cima: textos legais e logos de abertura (o logo que está na tela acende), título com "PRESS START" piscando, menu principal, opções na moldura do Etch A Sketch e a tela dos 50 tokens; fade ao trocar |
 | Dica | a dica do Hamm de onde ele está naquela fase (até duas linhas), com as palavras destacadas em amarelo como no jogo |
 
 ## Endereços (RAM do N64, Rev 1)
@@ -35,6 +36,7 @@ da corrida/desafio; o 1 vem do diálogo da missão.
 | `0x800BB556` | bateria (u16, cheia = 14) |
 | `0x800BB55A` | vidas (u16) |
 | `0x800BB55E` | moedas (u16); o código do Hamm compara com 50 |
+| `[0x801E3454] + 16` | imagem na tela de cima: o jogo carrega toda imagem (`pictures\*.pic`) no buffer apontado por `0x801E3454`; a cor 4–5 da paleta (offset 16) diferencia todas elas |
 | `0x801E22A1 + fase` | tokens da fase (u8): bit 0 moedas do Hamm, 1 missão, 2 desafio, 3 segredo/quebra-cabeça, 4 chefe |
 
 Vidas, bateria e moedas são os códigos GameShark públicos (`0x800BB10A`, `0x800BB106`, `0x800BB10E`) movidos

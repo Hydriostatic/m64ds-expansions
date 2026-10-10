@@ -20,7 +20,7 @@ import io, json, re, struct, sys, zipfile
 from PIL import Image, ImageDraw, ImageEnhance
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.3"
+VERSION = "1.4"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'toystory2.exp'
@@ -140,8 +140,22 @@ def font(name):
         im.putdata(px); g[chr(0x21 + i)] = (im, w, yo)
     return g
 
+def picture(name, W=320):
+    """pictures\\*.pic: 8-byte header, 256-colour RGBA5551 palette, CI8 pixels in 64x32 tiles, row-major."""
+    b = file(name); pal = [rgba16(struct.unpack('>H', b[8 + 2 * i:10 + 2 * i])[0]) for i in range(256)]
+    px = b[8 + 0x200:]; H = len(px) // W; out = [None] * (W * H); p = 0
+    for y in range(0, H, 32):
+        hh = min(32, H - y)
+        for x in range(0, W, 64):
+            ww = min(64, W - x)
+            for yy in range(hh):
+                for xx in range(ww):
+                    out[(y + yy) * W + x + xx] = pal[px[p]]; p += 1
+    im = Image.new('RGBA', (W, H)); im.putdata(out); return im
+
 PSX = font('fonts\\psxfont.fnt')          # menu font: yellow with a blue outline (level names)
 TAH = font('fonts\\tahoma08.fnt')         # small white font with an outline
+ETCH = font('fonts\\etchfont.fnt')       # the Etch A Sketch scribble font
 
 def text(s, fnt, space, tint=None, spacing=0):
     items = []; x = 0
@@ -333,6 +347,74 @@ files['names/title.png'] = title; names['default'] = 'names/title.png'
 files['boards/none.png'] = Image.new('RGBA', (1, 1)); boards['default'] = 'boards/none.png'
 files['hints/none.png'] = Image.new('RGBA', (1, 1)); hints['default'] = 'hints/none.png'
 
+
+# ------------------------------------------------------------------------------------------------
+# Front-end pages: one bottom screen for each picture the game shows outside the levels
+# ------------------------------------------------------------------------------------------------
+import numpy as np
+def cover(im, w, h):
+    sc = max(w / im.width, h / im.height); im = im.resize((round(im.width * sc), round(im.height * sc)), Image.LANCZOS)
+    x, y = (im.width - w) // 2, (im.height - h) // 2; return im.crop((x, y, x + w, y + h))
+PIC = {n: picture('pictures\\%s.pic' % n) for n in ['titlescr', 'start', 'activis', 'disint', 'ttlogo']}
+PIC['frame'] = picture('level16\\surroun.pic')
+t = np.array(PIC['titlescr']).astype(int)
+mask = (np.abs(t[:, :, :3] - t[:, 2:3, :3]).sum(axis=2) > 60).astype(np.uint8) * 255   # background = one colour per row
+t[:, :, 3] = mask
+TS2LOGO = Image.fromarray(t.astype(np.uint8), 'RGBA').crop((104, 38, 203, 182))
+def starry():
+    c = PIC['titlescr'].crop((2, 0, 3, 256)).resize((GW, GH), Image.BILINEAR); d = ImageDraw.Draw(c)
+    import random; rnd = random.Random(4)
+    for _ in range(26): d.point((rnd.randrange(GW), rnd.randrange(GH)), fill=(200, 230, 255, 255))
+    return c
+LOGOS = {'activision': PIC['activis'].crop((20, 70, 300, 190)), 'disney': PIC['disint'].crop((70, 30, 250, 230)),
+         'tt': PIC['ttlogo'].crop((20, 40, 300, 236))}
+def boot_page(lit):
+    c = starry(); lg = TS2LOGO.resize((round(TS2LOGO.width * 0.78), round(TS2LOGO.height * 0.78)), Image.LANCZOS)
+    c.alpha_composite(lg, ((GW - lg.width) // 2, 6))
+    cw, ch, gap = 72, 52, 6; x0 = (GW - 3 * cw - 2 * gap) // 2
+    for i, k in enumerate(['activision', 'disney', 'tt']):
+        on = lit in (k, 'all')
+        cd = panel(cw, ch, fill=(255, 255, 255, 255) if k == 'activision' else (0, 0, 0, 255),
+                   edge=EDGE if lit == k else CARD_EDGE, r=5, bw=2 if lit == k else 1)
+        im = LOGOS[k]
+        im = im.resize((cw - 6, round((cw - 6) * im.height / im.width)), Image.LANCZOS) if k == 'activision' else cover(im, cw - 6, ch - 6)
+        cd.alpha_composite(im, ((cw - im.width) // 2, (ch - im.height) // 2))
+        if not on: cd = ImageEnhance.Brightness(cd).enhance(0.35)
+        c.alpha_composite(cd, (x0 + i * (cw + gap), GH - ch - 12))
+    return c
+files['fe/legal.png'] = boot_page('all')
+files['fe/activision.png'] = boot_page('activision')
+files['fe/disney.png'] = boot_page('disney')
+files['fe/tt.png'] = boot_page('tt')
+files['fe/title.png'] = cover(PIC['start'], GW, GH)
+pst = text('PRESS START', PSX, 5); files['fe/press_start.png'] = pst
+files['fe/menu.png'] = cover(PIC['titlescr'], GW, GH)
+opt = Image.new('RGBA', (GW, GH), (178, 178, 170, 255))
+for line, y in [('Toy Story 2', 66), ('Buzz Lightyear', 104), ('to the Rescue!', 132)]:
+    tt = text(line, ETCH, 5); opt.alpha_composite(tt, ((GW - tt.width) // 2, y))
+fr = PIC['frame']; a = np.array(fr); a[(a[:, :, 1] > 200) & (a[:, :, 0] < 60) & (a[:, :, 2] < 60), 3] = 0
+opt.alpha_composite(Image.fromarray(a, 'RGBA').resize((GW, GH), Image.LANCZOS)); files['fe/options.png'] = opt
+allp = starry()
+n50 = Image.new('RGBA', (13 * 5 + 3, 16))
+for i, ch in enumerate('50/50'): n50.alpha_composite(files['digits/%s.png' % ('slash' if ch == '/' else ch)], (i * 13, 0))
+n50 = n50.resize((n50.width * 2, n50.height * 2), Image.NEAREST); allp.alpha_composite(n50, ((GW - n50.width) // 2, 120))
+tt = text('All tokens collected!', TAH, 3, YELLOW); allp.alpha_composite(tt, ((GW - tt.width) // 2, 170))
+files['fe/alltokens.png'] = allp
+for i in range(len(TOKEN)):
+    im = files['anim/token_%d.png' % i]; files['anim/token_big_%d.png' % i] = im.resize((im.width * 2, im.height * 2), Image.NEAREST)
+files['fe/none.png'] = Image.new('RGBA', (1, 1))
+
+# The picture on the top screen: the game loads every picture into the buffer at [0x801E3454]; the palette
+# (offset 16) tells them apart. Level pictures (lvlNNx, level complete, boss defeated, game over) mean the level page.
+SCREEN_OF = {'license': 1, 'license2': 1, 'activis': 2, 'disint': 3, 'ttlogo': 4, 'titlescr': 5, 'start': 6,
+             'etchscrn': 7, 'token50': 8, 'levcomp': 9, 'gameover': 9, 'boss03': 9}
+SIG = {}
+for name in FILES:
+    if name.startswith('pictures\\') and name.endswith('.pic'):
+        short = name.split('\\')[1][:-4]
+        scr = SCREEN_OF.get(short, 9 if short.startswith('lvl') else None)
+        if scr: SIG[str(struct.unpack('>I', file(name)[16:20])[0])] = scr
+
 # ------------------------------------------------------------------------------------------------
 # Memory (USA Rev 1). The stats are the public GameShark addresses moved by +0x450 for Rev 1; the
 # game's code adds 4 to the battery and caps it at 14, and warns when it is low. The level is the
@@ -347,6 +429,11 @@ values = {
     "card_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if v[1]}, "default": 0},
     "boss_stage": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if not v[1]}, "default": 0},
     "zero": {"type": "const", "value": 0},
+    "picture": {"type": "u32", "ptr": "0x801E3454", "offset": 16},
+    "screen": {"type": "lookup", "value": "picture", "table": SIG, "default": 1, "keep_last": True},
+    "fe_title": {"type": "lookup", "value": "screen", "table": {"5": 1}, "default": 0},
+    "fe_all": {"type": "lookup", "value": "screen", "table": {"8": 1}, "default": 0},
+    "page": {"type": "sum", "terms": [{"value": "screen", "times": 16}, "level"]},
 }
 # Tokens: one byte per level at 0x801E22A1 + level; the game sets bit n when token slot n is collected
 # (0 Hamm's coins, 1 the mission, 2 the challenge, 3 the puzzle/secret, 4 the boss).
@@ -393,7 +480,15 @@ L += [{"image": "images/token_dark.png", "anchor": "center", "x": GW // 2, "y": 
        "x": GW // 2, "y": BY + 46, "show": "boss_token"},
      {"image": "images/hint.png", "x": M, "y": NY},
      {"image": "images/hamm.png", "anchor": "center", "x": M + 22, "y": NY + NH // 2, "show": "in_level"},
-     {"pick": "level", "images": hints, "x": M + 44, "y": NY + 2}]
+     {"pick": "level", "images": hints, "x": M + 44, "y": NY + 2},
+     {"pick": "screen", "images": {"1": "fe/legal.png", "2": "fe/activision.png", "3": "fe/disney.png", "4": "fe/tt.png",
+                                   "5": "fe/title.png", "6": "fe/menu.png", "7": "fe/options.png", "8": "fe/alltokens.png",
+                                   "default": "fe/none.png"}, "x": 0, "y": 0},
+     {"frames": "fe/blink_{f}.png", "length": 2, "fps": 2, "phase": 0, "anchor": "center",
+      "x": GW // 2, "y": GH - 8 - pst.height // 2, "show": "fe_title"},
+     {"frames": "anim/token_big_{f}.png", "length": len(TOKEN), "fps": 20, "phase": 0, "anchor": "center",
+      "x": GW // 2, "y": 70, "show": "fe_all"}]
+files['fe/blink_0.png'] = pst; files['fe/blink_1.png'] = Image.new('RGBA', pst.size)
 
 manifest = {
     "format": 1,
@@ -406,7 +501,7 @@ manifest = {
     "theme": {"background": BG},
     "screen": {"title": "Toy Story 2"},
     "pixel_screen": {"size": [GW, GH], "fill": BG, "layers": L,
-                     "transition": {"value": "level", "style": "fade", "ms": 500}},
+                     "transition": {"value": "page", "style": "fade", "ms": 500}},
     "values": values,
 }
 
@@ -429,8 +524,10 @@ if PREVIEW:
     got = int(os.environ.get('PREVIEW_TOKENS', '0x12'), 16)       # this level's token byte (default: mission + boss)
     def val(k):
         d = values[k]; t = d["type"]
+        if k == "screen": return int(os.environ.get('PREVIEW_SCREEN', '9'))
         if t == "lookup": return d["table"].get(str(val(d["value"])), d.get("default"))
         if t == "const": return d["value"]
+        if t == "sum": return sum(val(x["value"] if isinstance(x, dict) else x) * (x.get("times", 1) if isinstance(x, dict) else 1) for x in d["terms"])
         if t == "select":
             i = val(d["index"]); o = d["options"]
             return val(o[i]) if isinstance(i, int) and 0 <= i < len(o) else d.get("default")
