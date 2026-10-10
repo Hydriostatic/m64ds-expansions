@@ -12,6 +12,9 @@ Memory addresses come from the Kirby 64 decompilation (github.com/farisawan-2000
 matches the USA ROM (sha1 6cea2d46b929a3bb347b060a77fccc83526fb855).
 """
 import io, json, random, struct, sys, zipfile, hashlib
+
+# Bump on every change to what the .exp shows (history in CHANGELOG.md).
+VERSION = "1.6"
 from PIL import Image, ImageDraw, ImageOps
 
 ROM_PATH = sys.argv[1]
@@ -769,7 +772,7 @@ manifest = {
     "id": "kirby64-usa",
     "name": "Kirby 64 – The Crystal Shards",
     "game": "Kirby 64: The Crystal Shards (USA)",
-    "version": "1.0",
+    "version": VERSION,
     "author": "Hydriostatic",
     "match": {"header": "KIRBY64", "country": "E"},
     "theme": {"background": "#9C7318"},

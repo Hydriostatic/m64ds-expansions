@@ -8,7 +8,7 @@ na tela de baixo, lendo a memória do jogo enquanto você joga.
 
 | Jogo | Pasta | O que a tela de baixo mostra |
 |---|---|---|
-| Kirby 64: The Crystal Shards (USA) | [`kirby64/`](kirby64/) | HUD da fase, menus, quadro de cristais por save, mini-games com placar ao vivo |
+| Kirby 64: The Crystal Shards (USA) — v1.6 | [`kirby64/`](kirby64/) | HUD da fase, menus, quadro de cristais por save, mini-games com placar ao vivo |
 
 ## Por que não tem `.exp` pronto aqui
 
@@ -24,6 +24,10 @@ python3 kirby64/make_kirby64.py "Kirby 64 - The Crystal Shards (USA).z64" kirby6
 
 Na tela de baixo, toque em **Expansões** › **Importar expansão (.exp)…** e escolha o arquivo. Quando
 você abre a ROM certa, o emulador usa a expansão sozinho.
+
+## Versões
+
+Toda mudança no que um `.exp` mostra sobe a versão dele, e cada pasta tem um `CHANGELOG.md`.
 
 ## Fazer uma expansão nova
 
