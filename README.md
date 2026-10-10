@@ -10,6 +10,7 @@ na tela de baixo, lendo a memória do jogo enquanto você joga.
 |---|---|---|
 | Banjo-Tooie (USA) — v1.2 | [`banjotooie/`](banjotooie/) | página estilo Nintendo DS com o visual de cada mundo: mundo atual, coletáveis do mundo, ovos e penas |
 | Kirby 64: The Crystal Shards (USA) — v1.6 | [`kirby64/`](kirby64/) | HUD da fase, menus, quadro de cristais por save, mini-games com placar ao vivo |
+| Toy Story 2: Buzz Lightyear to the Rescue! (USA Rev 1) — v1.0 | [`toystory2/`](toystory2/) | nome da fase na fonte do jogo, vidas, bateria, moedas, os 5 tokens da fase e a dica do Hamm |
 
 ## Por que não tem `.exp` pronto aqui
 
@@ -20,6 +21,7 @@ então não fica neste repositório. Cada pasta tem um script que monta o `.exp`
 pip install pillow
 python3 kirby64/make_kirby64.py "Kirby 64 - The Crystal Shards (USA).z64" kirby64.exp
 python3 banjotooie/make_banjotooie.py "Banjo-Tooie (USA).z64" banjotooie.exp
+python3 toystory2/make_toystory2.py "Toy Story 2 - Buzz Lightyear to the Rescue! (USA) (Rev 1).z64" toystory2.exp
 ```
 
 ## Instalar no emulador
