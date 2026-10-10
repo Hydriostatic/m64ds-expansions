@@ -20,7 +20,7 @@ Tela de 248×216 ampliada 5× (1240×1080 no AYN Thor), sem suavizar.
 |---|---|
 | Cabeçalho | nome da fase na fonte de menu do jogo (duas linhas nos nomes longos), número da fase e o token girando |
 | Status | vidas, bateria (14 segmentos) e moedas de 50, com a moeda girando |
-| Cartões | os 5 tokens da fase: moedas do Hamm, a missão da fase (ovelhas, soldados, Little Tikes…), desafio, chefe e segredo, com os ícones do próprio jogo; nas fases de chefe, um cartão de chefe |
+| Cartões | os 5 tokens da fase: moedas do Hamm, a missão da fase (ovelhas, soldados, Little Tikes…), desafio, chefe e segredo, com os ícones do próprio jogo e um token girando embaixo de cada um; nas fases de chefe, um cartão de chefe com o token |
 | Dica | a dica do Hamm de onde ele está naquela fase, com as palavras destacadas em amarelo como no jogo |
 
 ## Endereços (RAM do N64, Rev 1)

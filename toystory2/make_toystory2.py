@@ -20,7 +20,7 @@ import io, json, re, struct, sys, zipfile
 from PIL import Image, ImageDraw
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.0"
+VERSION = "1.1"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'toystory2.exp'
@@ -226,6 +226,10 @@ bb = None
 for im in TOKEN:
     b = im.getbbox(); bb = b if bb is None else (min(bb[0], b[0]), min(bb[1], b[1]), max(bb[2], b[2]), max(bb[3], b[3]))
 for i, im in enumerate(TOKEN): files['anim/token_%d.png' % i] = im.crop(bb)
+def small(im, h=18):                              # half-size token for under each card
+    w = max(1, round(im.width * h / im.height)); s2 = im.resize((w, h), Image.LANCZOS)
+    a = s2.getchannel('A').point(lambda v: 255 if v >= 110 else 0); s2.putalpha(a); return s2
+for i, im in enumerate(TOKEN): files['anim/token_s_%d.png' % i] = small(im.crop(bb))
 
 def icon(tpg, slot): return trim(tpg_page('level00\\%s.tpg' % tpg, slot).crop((0, 0, 32, 32)))
 HAMM, RACE, SECRET = icon('levcomp1', 10), icon('levcomp1', 11), icon('levcomp1', 12)
@@ -281,7 +285,7 @@ files['images/seg_on.png'] = seg_on; files['images/seg_off.png'] = seg_off
 CW = (GW - 8 - 8) // 5
 def card(ic, label):
     c = panel(CW - 2, BH - 8, fill=CARD, edge=CARD_EDGE, r=5, bw=1)
-    c.alpha_composite(ic, ((c.width - ic.width) // 2, max(2, 34 - ic.height)))
+    c.alpha_composite(ic, ((c.width - ic.width) // 2, max(2, 32 - ic.height)))
     t = text(label, TAH, 3)
     if t.width > c.width - 2: t = t.crop((0, 0, c.width - 2, t.height))
     c.alpha_composite(t, ((c.width - t.width) // 2, c.height - t.height - 3))
@@ -308,8 +312,8 @@ for lv, (nm, mlab, mslot, blab, bslot) in LEVELS.items():
                  (icon('levcomp2', bslot), 'Boss'), (SECRET, 'Secret')]
         for i, (ic, lab) in enumerate(cards): b.alpha_composite(card(ic, lab), (i * CW, 0))
     else:
-        t = text('BOSS STAGE', PSX, 5); b.alpha_composite(t, ((b.width - t.width) // 2, 8))
-        t = text('beat the boss to win a Pizza Planet token', TAH, 3); b.alpha_composite(t, ((b.width - t.width) // 2, 40))
+        t = text('BOSS STAGE', PSX, 5); b.alpha_composite(t, ((b.width - t.width) // 2, 0))
+        t = text('beat the boss to win a Pizza Planet token', TAH, 3); b.alpha_composite(t, ((b.width - t.width) // 2, b.height - t.height - 1))
     files['boards/%d.png' % lv] = b; boards[str(lv)] = 'boards/%d.png' % lv
     files['hints/%d.png' % lv] = wrap(HINTS.get(lv, BOSS_HINT), GW - 8 - 50); hints[str(lv)] = 'hints/%d.png' % lv
 title = Image.new('RGBA', (HW - 8, HH - 6))
@@ -329,6 +333,8 @@ values = {
     "lives":   {"type": "u16", "addr": "0x800BB55A"},
     "coins":   {"type": "u16", "addr": "0x800BB55E"},
     "in_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k in LEVELS}, "default": 0},
+    "card_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if v[1]}, "default": 0},
+    "boss_stage": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if not v[1]}, "default": 0},
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -350,7 +356,11 @@ L = [{"image": "images/bg.png", "x": 0, "y": 0},
      {"number": "coins", "glyphs": "digits/{c}.png", "advance": 13, "align": "right", "x": 203, "y": SY + 9},
      {"image": "images/of50.png", "x": 203, "y": SY + 9},
      {"image": "images/board.png", "x": 4, "y": BY},
-     {"pick": "level", "images": boards, "x": 8, "y": BY + 4},
+     {"pick": "level", "images": boards, "x": 8, "y": BY + 4}]
+L += [{"frames": "anim/token_s_{f}.png", "length": len(TOKEN), "fps": 20, "phase": i * 6, "anchor": "center",
+       "x": 8 + i * CW + (CW - 2) // 2, "y": BY + 4 + 42, "show": "card_level"} for i in range(5)]
+L += [{"frames": "anim/token_{f}.png", "length": len(TOKEN), "fps": 20, "phase": 8, "anchor": "center",
+       "x": GW // 2, "y": BY + 4 + 35, "show": "boss_stage"},
      {"image": "images/hint.png", "x": 4, "y": NY},
      {"image": "images/hamm.png", "anchor": "center", "x": 24, "y": NY + (GH - 4 - NY) // 2, "show": "in_level"},
      {"pick": "level", "images": hints, "x": 46, "y": NY + 6}]
