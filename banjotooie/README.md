@@ -18,6 +18,7 @@ no AYN Thor), sem suavizar.
 
 | Parte | O que mostra |
 |---|---|
+| Visual | cada mundo usa texturas das próprias fases (fundo, título, cartões, faixa); madeira na Isle o' Hags e antes do jogo |
 | Cabeçalho | nome do mundo atual na fonte do título (Banjo-Tooie antes de entrar num mundo) |
 | 8 cartões | Jiggies, notas, Jinjos, Glowbos, páginas do Cheato, favos vazios e golpes do Jamjars **deste mundo**, e o tempo de jogo da sessão; o número fica verde quando o mundo está completo |
 | Faixa | ovos azuis, de fogo, granada, de gelo e Clockwork, penas vermelhas e douradas |

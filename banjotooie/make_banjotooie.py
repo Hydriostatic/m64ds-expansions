@@ -16,7 +16,7 @@ import io, json, struct, sys, zipfile, zlib
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.0"
+VERSION = "1.1"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'banjotooie.exp'
@@ -105,8 +105,8 @@ class Font:
         self.h = max(im.height for im, a in self.g.values())
         if "'" not in self.map and '"' in self.map:       # apostrophe: one stroke of the quote mark
             im, adv = self.g[self.map['"']]
-            half = im.crop((0, 0, im.width // 2, im.height))
-            self.g['apos'] = (half, max(3, adv // 2)); self.map["'"] = 'apos'
+            half = im.crop((0, 0, adv // 2, im.height))           # the strokes touch: keep the left one
+            self.g['apos'] = (half, half.width + 1); self.map["'"] = 'apos'
 
     def render(self, text, top, bottom=None, outline=(36, 18, 0), spacing=0, space=None):
         bottom = bottom or top
@@ -147,10 +147,6 @@ ic = {n: sprite(i) for n, i in dict(
     jiggy=0x0BE6, note=0x0BE9, honey_empty=0x0BEA, glowbo=0x0BE8, cheato=0x0BE7, jamjars=0x0BB4,
     clock=0x0B98, egg_blue=0x0B81, egg_fire=0x0B83, egg_grenade=0x0B84, egg_ice=0x0B82, egg_clock=0x09C5,
     feather_red=0x0B4A, feather_gold=0x0B4B, btn_start=0x0B60, jinjo=0x0BD0).items()}
-boards = model_texture(0x05FA, 0)      # vertical boards
-plank = model_texture(0x05E1, 0)       # weathered plank
-grain = model_texture(0x06D4, 0)       # red-brown grain
-light = model_texture(0x0674, 1)       # pale board
 
 # ---------------------------------------------------------------------------------------------
 # Drawing helpers (DS-style cards: textured fill, outline, 1px bevel, drop shadow)
@@ -282,27 +278,91 @@ sl = text.render('/', *CREAM); l, _, r, _ = sl.getbbox()
 files["ns/slash.png"] = sl.crop((l, 4, r, 4 + files["ns/0.png"].height))
 
 # ---------------------------------------------------------------------------------------------
-# Static art: background, header, cards with their icons, ammo strip, touch tab bar
+# Static art, one background per world: each world's page is built from textures of that world's
+# own levels (background tile, header strip, card fill, ammo strip). "model:texture" in the ROM.
 # ---------------------------------------------------------------------------------------------
-bg = bright(tile(boards, GW, GH), 0.45).convert('RGBA')
-ov = Image.new('RGBA', (GW, GH)); d = ImageDraw.Draw(ov)
-for k in range(-GH, GW, 12):
-    d.line((k, 0, k + GH, GH), fill=(255, 220, 160, 14), width=4)
-bg.alpha_composite(ov)
-bg.alpha_composite(tile(plank, GW, HEAD), (0, 0))
-d = ImageDraw.Draw(bg)
-d.line((0, HEAD - 2, GW, HEAD - 2), fill=(255, 220, 150, 120)); d.line((0, HEAD - 1, GW, HEAD - 1), fill=(24, 12, 0, 255))
+def tex(spec):
+    m, k = spec.split(':')
+    return model_texture(int(m, 16), int(k))
+
+WOOD = {"back": "05FA:0", "back_f": 0.45, "head": "05E1:0", "card": "0674:1", "card_f": 0.9,
+        "strip": "05FA:0", "strip_f": 0.7, "bar": "06D4:0", "bar_f": 0.55}
+THEMES = {
+    0: {"back": "1CF9:12", "back_f": 0.5, "head": "082E:1", "card": "0968:1", "card_f": 0.8, "strip": "0866:6"},
+    1: {"back": "0817:6", "back_f": 0.6, "head": "08D5:2", "card": "06E9:2", "card_f": 0.85, "strip": "08F0:1"},
+    2: {"back": "085D:8", "back_f": 0.5, "head": "0701:0", "card": "0876:0", "card_f": 0.6, "strip": "08BD:0"},
+    3: {"back": "08B8:5", "back_f": 0.5, "head": "05E1:0", "card": "0674:1", "card_f": 0.9, "strip": "08C1:1"},
+    4: {"back": "099B:2", "back_f": 0.5, "head": "1CF9:62", "card": "08DD:1", "card_f": 0.8, "strip": "080B:4"},
+    5: {"back": "0817:3", "back_f": 0.7, "head": "087C:0", "card": "0755:2", "card_f": 0.9, "strip": "08F0:1"},
+    6: {"back": "0865:0", "back_f": 0.5, "head": "07BB:1", "card": "06CB:4", "card_f": 0.8, "strip": "08C1:1"},
+    7: {"back": "080B:38", "back_f": 0.7, "head": "06F2:3", "card": "0999:0", "card_f": 0.85, "strip": "080B:36"},
+    8: {},
+}
 
 CARDS = [("jiggies", "jiggy"), ("notes", "note"), ("jinjos", "jinjo"), ("glowbos", "glowbo"),
          ("pages", "cheato"), ("honey", "honey_empty"), ("moves", "jamjars"), ("time", "clock")]
 CW, CH, CG = 56, 54, 4
 CX0, CY0 = (GW - 4 * CW - 3 * CG) // 2, HEAD + 5
-layers = [{"image": "images/bg.png", "x": 0, "y": 0}]
+AY = CY0 + 2 * (CH + CG) + 2
+AMMO = [("blue_eggs", "egg_blue"), ("fire_eggs", "egg_fire"), ("grenade_eggs", "egg_grenade"), ("ice_eggs", "egg_ice"),
+        ("clockwork_eggs", "egg_clock"), ("red_feathers", "feather_red"), ("gold_feathers", "feather_gold")]
+STEP = (GW - 2 * CX0 - 4) / len(AMMO)
+TY = GH - TABS
+T1 = (8, TY + 3, 44, TABS - 5)
+BUTTONS = ((60, 86, "MENU", 'btn_start', "menu"), (152, 88, "SAVE/QUIT", None, "save_quit"))
+
+def static_art(theme):
+    th = dict(WOOD, **theme)
+    back, head, cardt, strip, bar = (tex(th[k]) for k in ("back", "head", "card", "strip", "bar"))
+    wood, light = tex(WOOD["back"]), tex(WOOD["card"])
+    bg = bright(tile(back, GW, GH), th["back_f"]).convert('RGBA')
+    ov = Image.new('RGBA', (GW, GH)); d = ImageDraw.Draw(ov)
+    for k in range(-GH, GW, 12):
+        d.line((k, 0, k + GH, GH), fill=(255, 220, 160, 14), width=4)
+    bg.alpha_composite(ov)
+    bg.alpha_composite(tile(head, GW, HEAD), (0, 0))
+    ov = Image.new('RGBA', (GW, HEAD), (0, 0, 0, 60)); bg.alpha_composite(ov)          # keep the title readable
+    d = ImageDraw.Draw(bg)
+    d.line((0, HEAD - 2, GW, HEAD - 2), fill=(255, 220, 150, 120)); d.line((0, HEAD - 1, GW, HEAD - 1), fill=(24, 12, 0, 255))
+    for k, (name, icon) in enumerate(CARDS):
+        x = CX0 + (k % 4) * (CW + CG); y = CY0 + (k // 4) * (CH + CG)
+        card(bg, x, y, CW, CH, cardt, th["card_f"])
+        plate = Image.new('RGBA', (CW - 8, 15), (0, 0, 0, 0))
+        plate.putalpha(rmask(CW - 8, 15, 3).point(lambda v: v * 120 // 255))
+        bg.alpha_composite(plate, (x + 4, y + CH - 19))                                # number plate
+        put(bg, ic[icon], x + CW // 2, y + 18, 'cc')
+    card(bg, CX0, AY, GW - 2 * CX0, 24, strip, th["strip_f"], sunk=True, shadow=False)
+    ov = Image.new('RGBA', (GW - 2 * CX0 - 4, 20), (0, 0, 0, 70)); bg.alpha_composite(ov, (CX0 + 2, AY + 2))
+    for k, (name, icon) in enumerate(AMMO):
+        x = CX0 + 4 + int(k * STEP)
+        put(bg, shrink(ic[icon], 17), x, AY + 12, 'lc')
+    bg.alpha_composite(bright(tile(bar, GW, TABS), th["bar_f"]), (0, TY))
+    d = ImageDraw.Draw(bg)
+    d.line((0, TY, GW, TY), fill=(24, 12, 0, 255)); d.line((0, TY + 1, GW, TY + 1), fill=(255, 210, 150, 90))
+    card(bg, *T1, light, 1.0, r=5)                       # tab 1: this page (raised, lit)
+    put(bg, shrink(ic['jiggy'], 24), T1[0] + T1[2] // 2, T1[1] + T1[3] // 2, 'cc')
+    d.polygon([(T1[0] + 18, TY + 1), (T1[0] + 26, TY + 1), (T1[0] + 22, TY - 3)], fill=(255, 214, 40, 255))
+    for (x, w, label, icon, action) in BUTTONS:          # menu, save and quit
+        y, h = TY + 6, TABS - 9
+        card(bg, x, y, w, h, wood, 0.62, r=5, shadow=True)
+        lab = text.render(label, *CREAM)
+        if icon:
+            im = shrink(ic[icon], 18)
+            put(bg, im, x + 6, y + h // 2, 'lc'); put(bg, lab, x + 6 + im.width + 4, y + h // 2 + 1, 'lc')
+        else:
+            put(bg, lab, x + w // 2, y + h // 2 + 1, 'cc')
+    return bg
+
+# Dynamic layers: the world's background, its name, the numbers
+backs = {"default": "images/bg_none.png"}
+files["images/bg_none.png"] = static_art({})
+for w in range(9):
+    files["images/bg_%d.png" % w] = static_art(THEMES[w]); backs[str(w)] = "images/bg_%d.png" % w
+layers = [{"image": "images/bg_none.png", "x": 0, "y": 0},          # before the game runs
+          {"pick": "world", "images": backs, "x": 0, "y": 0}]
 for k, (name, icon) in enumerate(CARDS):
     x = CX0 + (k % 4) * (CW + CG); y = CY0 + (k // 4) * (CH + CG)
-    card(bg, x, y, CW, CH, light, 0.9)
-    put(bg, ic[icon], x + CW // 2, y + 20, 'cc')
-    cx, ny = x + CW // 2, y + CH - 18
+    cx, ny = x + CW // 2, y + CH - 19
     if name == "time":
         layers.append({"number": "time", "glyphs": "ny/{c}.png", "align": "center", "x": cx, "y": ny})
         continue
@@ -312,38 +372,10 @@ for k, (name, icon) in enumerate(CARDS):
         {"number": "here_" + name, "glyphs": "ng/{c}.png", "align": "right", "x": split, "y": ny, "show": "here_%s_done" % name},
         {"number": "here_%s_max" % name, "glyphs": "ns/{c}.png", "x": split - 1, "y": ny + 3},
     ]
-
-AY = CY0 + 2 * (CH + CG) + 2
-card(bg, CX0, AY, GW - 2 * CX0, 24, boards, 0.7, sunk=True, shadow=False)
-AMMO = [("blue_eggs", "egg_blue"), ("fire_eggs", "egg_fire"), ("grenade_eggs", "egg_grenade"), ("ice_eggs", "egg_ice"),
-        ("clockwork_eggs", "egg_clock"), ("red_feathers", "feather_red"), ("gold_feathers", "feather_gold")]
-step = (GW - 2 * CX0 - 4) / len(AMMO)
 for k, (name, icon) in enumerate(AMMO):
-    x = CX0 + 4 + int(k * step)
-    im = shrink(ic[icon], 17)
-    put(bg, im, x, AY + 12, 'lc')
-    layers.append({"number": name, "glyphs": "ns/{c}.png", "x": x + im.width + 1, "y": AY + 6})
-
-TY = GH - TABS
-bg.alpha_composite(bright(tile(grain, GW, TABS), 0.55), (0, TY))
-d = ImageDraw.Draw(bg)
-d.line((0, TY, GW, TY), fill=(24, 12, 0, 255)); d.line((0, TY + 1, GW, TY + 1), fill=(255, 210, 150, 90))
-# tab 1: this page (raised, lit); tab 2: the emulator menu; tab 3: save and quit
-T1 = (8, TY + 3, 44, TABS - 5)
-card(bg, *T1, light, 1.0, r=5)
-put(bg, shrink(ic['jiggy'], 24), T1[0] + T1[2] // 2, T1[1] + T1[3] // 2, 'cc')
-d.polygon([(T1[0] + 18, TY + 1), (T1[0] + 26, TY + 1), (T1[0] + 22, TY - 3)], fill=(255, 214, 40, 255))
-buttons = []
-for (x, w, label, icon, action) in ((60, 86, "MENU", 'btn_start', "menu"), (152, 88, "SAVE/QUIT", None, "save_quit")):
-    y, h = TY + 6, TABS - 9
-    card(bg, x, y, w, h, boards, 0.62, r=5, shadow=True)
-    lab = text.render(label, *CREAM)
-    if icon:
-        im = shrink(ic[icon], 18)
-        put(bg, im, x + 6, y + h // 2, 'lc'); put(bg, lab, x + 6 + im.width + 4, y + h // 2 + 1, 'lc')
-    else:
-        put(bg, lab, x + w // 2, y + h // 2 + 1, 'cc')
-    buttons.append({"x": x, "y": y, "w": w, "h": h, "action": action})
+    x = CX0 + 4 + int(k * STEP)
+    layers.append({"number": name, "glyphs": "ns/{c}.png", "x": x + shrink(ic[icon], 17).width + 1, "y": AY + 6})
+buttons = [{"x": x, "y": TY + 6, "w": w, "h": TABS - 9, "action": a} for (x, w, _, _, a) in BUTTONS]
 
 # World names for the header (picked by the world value), squeezed to fit like a DS title bar
 def header(name):
@@ -351,13 +383,12 @@ def header(name):
         im = title.render(name, *YEL, spacing=sp, space=space)
         if im.width <= GW - 6: return im
     return title.render(name.split(' ')[0] + ' ' + name.split(' ')[1], *YEL, spacing=-2, space=5)
-files["images/bg.png"] = bg
 pick = {"default": "images/w_none.png"}
 files["images/w_none.png"] = header("BANJO-TOOIE")
 for w, name in enumerate(WORLDS):
     files["images/w_%d.png" % w] = header(name)
     pick[str(w)] = "images/w_%d.png" % w
-layers.insert(1, {"pick": "world", "images": pick, "anchor": "center", "x": GW // 2, "y": HEAD // 2 + 1})
+layers.insert(2, {"pick": "world", "images": pick, "anchor": "center", "x": GW // 2, "y": HEAD // 2 + 1})
 
 manifest = {
     "format": 1,

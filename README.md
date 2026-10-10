@@ -8,7 +8,7 @@ na tela de baixo, lendo a memória do jogo enquanto você joga.
 
 | Jogo | Pasta | O que a tela de baixo mostra |
 |---|---|---|
-| Banjo-Tooie (USA) — v1.0 | [`banjotooie/`](banjotooie/) | página estilo Nintendo DS: mundo atual, coletáveis do mundo, ovos e penas |
+| Banjo-Tooie (USA) — v1.1 | [`banjotooie/`](banjotooie/) | página estilo Nintendo DS com o visual de cada mundo: mundo atual, coletáveis do mundo, ovos e penas |
 | Kirby 64: The Crystal Shards (USA) — v1.6 | [`kirby64/`](kirby64/) | HUD da fase, menus, quadro de cristais por save, mini-games com placar ao vivo |
 
 ## Por que não tem `.exp` pronto aqui
