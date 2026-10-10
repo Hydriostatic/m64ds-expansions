@@ -20,7 +20,7 @@ import io, json, re, struct, sys, zipfile
 from PIL import Image, ImageDraw
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.1"
+VERSION = "1.2"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'toystory2.exp'
@@ -266,58 +266,59 @@ HINTS = {                                   # Hamm's coin hint for each level, f
 }
 BOSS_HINT = "defeat the ^boss^ to get a pizza planet ^token^!"
 
-# layout (pixels of the 248x216 page)
-HX, HY, HW, HH = 4, 4, GW - 8, 46         # header: level name, level number, spinning token
-SY, SH = HY + HH + 4, 34                  # status row
-BY, BH = SY + SH + 4, 74                  # token cards
-NY = BY + BH + 4                          # hint panel
+# layout (pixels of the 248x216 page): 4 px margins and gaps, room inside every panel
+M = 4
+HX, HY, HW, HH = M, M, GW - 2 * M, 48       # header: level name, level number, spinning token
+SY, SH = HY + HH + M, 38                    # status row
+BY, BH = SY + SH + M, 72                    # token cards
+NY = BY + BH + M; NH = GH - M - NY          # hint panel
 files['images/bg.png'] = Image.new('RGBA', (GW, GH), BG)
 files['images/header.png'] = panel(HW, HH)
-files['images/status.png'] = panel(GW - 8, SH)
-files['images/board.png'] = panel(GW - 8, BH)
-files['images/hint.png'] = panel(GW - 8, GH - 4 - NY)
+files['images/status.png'] = panel(GW - 2 * M, SH)
+files['images/board.png'] = panel(GW - 2 * M, BH)
+files['images/hint.png'] = panel(GW - 2 * M, NH)
 files['images/hamm.png'] = HAMM
-seg_on = Image.new('RGBA', (4, 16)); ImageDraw.Draw(seg_on).rectangle((0, 0, 2, 15), fill=(120, 255, 60, 255), outline=(0, 0, 0, 255))
-seg_off = Image.new('RGBA', (4 * 14 + 1, 16))
-for i in range(14): ImageDraw.Draw(seg_off).rectangle((i * 4, 0, i * 4 + 2, 15), fill=(36, 56, 36, 255), outline=(0, 0, 0, 255))
+SEGS, SEG = 14, 3                           # battery: 14 segments, 3 px apart
+seg_on = Image.new('RGBA', (SEG, 18)); ImageDraw.Draw(seg_on).rectangle((0, 0, 1, 17), fill=(120, 255, 60, 255))
+seg_off = Image.new('RGBA', (SEG * SEGS, 18))
+for i in range(SEGS): ImageDraw.Draw(seg_off).rectangle((i * SEG, 0, i * SEG + 1, 17), fill=(40, 62, 40, 255))
 files['images/seg_on.png'] = seg_on; files['images/seg_off.png'] = seg_off
 
-CW = (GW - 8 - 8) // 5
-def card(ic, label):
-    c = panel(CW - 2, BH - 8, fill=CARD, edge=CARD_EDGE, r=5, bw=1)
-    c.alpha_composite(ic, ((c.width - ic.width) // 2, max(2, 32 - ic.height)))
-    t = text(label, TAH, 3)
-    if t.width > c.width - 2: t = t.crop((0, 0, c.width - 2, t.height))
-    c.alpha_composite(t, ((c.width - t.width) // 2, c.height - t.height - 3))
+CW, CG = 42, 4                              # card width, gap between cards
+CX0 = M + (GW - 2 * M - (5 * CW + 4 * CG)) // 2
+CH = BH - 12
+def card(ic):
+    c = panel(CW, CH, fill=CARD, edge=CARD_EDGE, r=5, bw=1)
+    c.alpha_composite(ic, ((c.width - ic.width) // 2, 34 - ic.height))
     return c
 
+NAME_W = HW - 8 - 64                        # name area (the right side holds LEVEL n and the token)
 names, boards, hints = {}, {}, {}
 for lv, (nm, mlab, mslot, blab, bslot) in LEVELS.items():
     head = Image.new('RGBA', (HW - 8, HH - 6))
-    t = text('LEVEL %d' % lv, TAH, 3, YELLOW); head.alpha_composite(t, (head.width - t.width - 2, 0))
-    maxw = head.width - 56
+    t = text('LEVEL %d' % lv, TAH, 3, YELLOW); head.alpha_composite(t, (head.width - t.width - 4, 1))
     one = text(nm, PSX, 5)
-    if one.width <= maxw:
-        head.alpha_composite(one, (2, (head.height - one.height) // 2))
+    if one.width <= NAME_W:
+        head.alpha_composite(one, (4, (head.height - one.height) // 2))
     else:                                     # long names: two lines, split where the lines are most even
         words = nm.split(' ')
         best = min(range(1, len(words)), key=lambda k: max(text(' '.join(words[:k]), PSX, 5).width,
                                                            text(' '.join(words[k:]), PSX, 5).width))
-        a, b2 = text(' '.join(words[:best]), PSX, 5), text(' '.join(words[best:]), PSX, 5)
-        head.alpha_composite(a, (2, 0)); head.alpha_composite(b2, (2, head.height - b2.height))
+        l1, l2 = text(' '.join(words[:best]), PSX, 5), text(' '.join(words[best:]), PSX, 5)
+        head.alpha_composite(l1, (4, 0)); head.alpha_composite(l2, (4, head.height - l2.height))
     files['names/%d.png' % lv] = head; names[str(lv)] = 'names/%d.png' % lv
-    b = Image.new('RGBA', (GW - 16, BH - 8))
+    b = Image.new('RGBA', (GW - 2 * M, BH))
     if mlab:
-        cards = [(HAMM, 'Coins'), (icon('levcomp1', mslot), mlab), (RACE, 'Timed'),
-                 (icon('levcomp2', bslot), 'Boss'), (SECRET, 'Secret')]
-        for i, (ic, lab) in enumerate(cards): b.alpha_composite(card(ic, lab), (i * CW, 0))
+        cards = [HAMM, icon('levcomp1', mslot), RACE, icon('levcomp2', bslot), SECRET]
+        for i, ic in enumerate(cards): b.alpha_composite(card(ic), (CX0 - M + i * (CW + CG), 6))
     else:
-        t = text('BOSS STAGE', PSX, 5); b.alpha_composite(t, ((b.width - t.width) // 2, 0))
-        t = text('beat the boss to win a Pizza Planet token', TAH, 3); b.alpha_composite(t, ((b.width - t.width) // 2, b.height - t.height - 1))
+        t = text('BOSS STAGE', PSX, 5); b.alpha_composite(t, ((b.width - t.width) // 2, 5))
     files['boards/%d.png' % lv] = b; boards[str(lv)] = 'boards/%d.png' % lv
-    files['hints/%d.png' % lv] = wrap(HINTS.get(lv, BOSS_HINT), GW - 8 - 50); hints[str(lv)] = 'hints/%d.png' % lv
+    hint = wrap(HINTS.get(lv, BOSS_HINT), GW - 2 * M - 52, maxlines=2)
+    hb = Image.new('RGBA', (hint.width, NH - 4)); hb.alpha_composite(hint, (0, (hb.height - hint.height) // 2))
+    files['hints/%d.png' % lv] = hb; hints[str(lv)] = 'hints/%d.png' % lv
 title = Image.new('RGBA', (HW - 8, HH - 6))
-t = text('Toy Story 2', PSX, 5); title.alpha_composite(t, (2, (title.height - t.height) // 2))
+t = text('Toy Story 2', PSX, 5); title.alpha_composite(t, (4, (title.height - t.height) // 2))
 files['names/title.png'] = title; names['default'] = 'names/title.png'
 files['boards/none.png'] = Image.new('RGBA', (1, 1)); boards['default'] = 'boards/none.png'
 files['hints/none.png'] = Image.new('RGBA', (1, 1)); hints['default'] = 'hints/none.png'
@@ -344,26 +345,27 @@ L = [{"image": "images/bg.png", "x": 0, "y": 0},
      {"image": "images/header.png", "x": HX, "y": HY},
      {"pick": "level", "images": names, "x": HX + 4, "y": HY + 3},
      {"frames": "anim/token_{f}.png", "length": len(TOKEN), "fps": 20, "phase": 0, "anchor": "center",
-      "x": GW - 4 - 30, "y": HY + 28},
-     {"image": "images/status.png", "x": 4, "y": SY},
-     {"image": "images/buzz.png", "anchor": "center", "x": 20, "y": SY + SH // 2},
-     {"image": "small/x.png", "x": 33, "y": SY + 13},
-     {"number": "lives", "glyphs": "small/{c}.png", "advance": 8, "x": 42, "y": SY + 13},
-     {"image": "images/battery.png", "anchor": "center", "x": 72, "y": SY + SH // 2},
-     {"image": "images/seg_off.png", "x": 86, "y": SY + 9},
-     {"repeat": "images/seg_on.png", "count": "battery", "max": 14, "dx": 4, "x": 86, "y": SY + 9},
-     {"frames": "anim/coin_{f}.png", "length": len(COIN), "fps": 14, "phase": 0, "anchor": "center", "x": 160, "y": SY + SH // 2},
-     {"number": "coins", "glyphs": "digits/{c}.png", "advance": 13, "align": "right", "x": 203, "y": SY + 9},
-     {"image": "images/of50.png", "x": 203, "y": SY + 9},
-     {"image": "images/board.png", "x": 4, "y": BY},
-     {"pick": "level", "images": boards, "x": 8, "y": BY + 4}]
+      "x": GW - M - 34, "y": HY + 30},
+     {"image": "images/status.png", "x": M, "y": SY},
+     {"image": "images/buzz.png", "anchor": "center", "x": M + 20, "y": SY + SH // 2},
+     {"image": "small/x.png", "x": M + 37, "y": SY + 15},
+     {"number": "lives", "glyphs": "small/{c}.png", "advance": 8, "x": M + 46, "y": SY + 15},
+     {"image": "images/battery.png", "anchor": "center", "x": M + 82, "y": SY + SH // 2},
+     {"image": "images/seg_off.png", "x": M + 98, "y": SY + 10},
+     {"repeat": "images/seg_on.png", "count": "battery", "max": SEGS, "dx": SEG, "x": M + 98, "y": SY + 10},
+     {"frames": "anim/coin_{f}.png", "length": len(COIN), "fps": 14, "phase": 0, "anchor": "center",
+      "x": M + 157, "y": SY + SH // 2},
+     {"number": "coins", "glyphs": "digits/{c}.png", "advance": 13, "align": "right", "x": GW - M - 47, "y": SY + 11},
+     {"image": "images/of50.png", "x": GW - M - 47, "y": SY + 11},
+     {"image": "images/board.png", "x": M, "y": BY},
+     {"pick": "level", "images": boards, "x": M, "y": BY}]
 L += [{"frames": "anim/token_s_{f}.png", "length": len(TOKEN), "fps": 20, "phase": i * 6, "anchor": "center",
-       "x": 8 + i * CW + (CW - 2) // 2, "y": BY + 4 + 42, "show": "card_level"} for i in range(5)]
+       "x": CX0 + i * (CW + CG) + CW // 2, "y": BY + 6 + 46, "show": "card_level"} for i in range(5)]
 L += [{"frames": "anim/token_{f}.png", "length": len(TOKEN), "fps": 20, "phase": 8, "anchor": "center",
-       "x": GW // 2, "y": BY + 4 + 35, "show": "boss_stage"},
-     {"image": "images/hint.png", "x": 4, "y": NY},
-     {"image": "images/hamm.png", "anchor": "center", "x": 24, "y": NY + (GH - 4 - NY) // 2, "show": "in_level"},
-     {"pick": "level", "images": hints, "x": 46, "y": NY + 6}]
+       "x": GW // 2, "y": BY + 46, "show": "boss_stage"},
+     {"image": "images/hint.png", "x": M, "y": NY},
+     {"image": "images/hamm.png", "anchor": "center", "x": M + 22, "y": NY + NH // 2, "show": "in_level"},
+     {"pick": "level", "images": hints, "x": M + 44, "y": NY + 2}]
 
 manifest = {
     "format": 1,
