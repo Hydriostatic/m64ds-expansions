@@ -190,6 +190,30 @@ As posições são em pixels da tela (`size`). As camadas são desenhadas na ord
   `save_quit`, `screen:map`). A arte do botão vai numa camada.
 - Segure a página para salvar uma cópia da memória, como no nome do mundo das outras páginas.
 
+### Animação e transição (versões do M64-DS de outubro/2026 em diante)
+
+Uma camada `frames` toca uma animação: `{f}` no caminho vira o número do quadro, de 0 a `length - 1`.
+
+```json
+{ "frames": "anim/jinjo_{f}.png", "length": 10, "fps": 15, "phase": 3, "anchor": "center", "x": 40, "y": 60 }
+```
+
+- `fps`: quadros por segundo (padrão 15). `phase`: quantos quadros adiantar, para ícones lado a lado
+  não girarem juntos. Aceita `show` / `hide` como as outras camadas.
+- Enquanto a página tem animação ou transição na tela, o emulador redesenha a ~30 quadros por segundo.
+  Os valores da memória continuam sendo lidos 4 vezes por segundo.
+
+`transition` (opcional, dentro de `pixel_screen`) toca uma transição quando um valor muda, por exemplo
+ao trocar de mundo:
+
+```json
+"transition": { "value": "world", "style": "jigsaw", "ms": 850, "cols": 8, "rows": 7 }
+```
+
+- `jigsaw`: a página nova cai por cima da antiga em peças de quebra-cabeça (`cols` × `rows`), uma de
+  cada vez. `fade`: a página nova aparece por cima, aos poucos.
+- A primeira leitura do valor não dispara transição; só as mudanças depois dela.
+
 O exemplo é [`kirby64/make_kirby64.py`](kirby64/make_kirby64.py), que monta o `kirby64.exp` a partir da
 sua ROM do Kirby 64 (USA), cortando a arte do próprio jogo.
 

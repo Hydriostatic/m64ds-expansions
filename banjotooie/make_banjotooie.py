@@ -16,7 +16,7 @@ import io, json, struct, sys, zipfile, zlib
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.1"
+VERSION = "1.2"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'banjotooie.exp'
@@ -79,6 +79,23 @@ def sprite(i, rows=None):
         h = min(h, (o1 - o0 - {1: 32, 4: 512}.get(fmt, 0)) * 8 // (w * BPP[fmt]))
     im = pixels(b, o0, fmt, w, rows or h)
     return im.crop(im.getbbox())
+
+def sprite_frames(i):
+    """Every frame of an animated HUD sprite (shared palette, one entry per frame at 0x1C + 12*k),
+    cropped to one common box so the animation doesn't wobble."""
+    b = asset(i)
+    fc, fmt = struct.unpack('>HH', b[:4]); w, h = struct.unpack('>HH', b[8:12])
+    o0 = struct.unpack('>I', b[0x10:0x14])[0]
+    palb = {1: 32, 4: 512}.get(fmt, 0); nb = w * h * BPP[fmt] // 8
+    out = []
+    for k in range(fc):
+        off = struct.unpack('>I', b[0x1C + 12 * k + 8:0x1C + 12 * k + 12])[0]
+        out.append(pixels(b[o0:o0 + palb] + b[o0 + off:o0 + off + nb], 0, fmt, w, h))
+    box = out[0].getbbox()
+    for f in out[1:]:
+        bb = f.getbbox()
+        if bb: box = (min(box[0], bb[0]), min(box[1], bb[1]), max(box[2], bb[2]), max(box[3], bb[3]))
+    return [f.crop(box) for f in out]
 
 def model_texture(i, k):
     """Texture k of a level model (texture list: u32 size, u16 count, then 8-byte entries)."""
@@ -147,6 +164,12 @@ ic = {n: sprite(i) for n, i in dict(
     jiggy=0x0BE6, note=0x0BE9, honey_empty=0x0BEA, glowbo=0x0BE8, cheato=0x0BE7, jamjars=0x0BB4,
     clock=0x0B98, egg_blue=0x0B81, egg_fire=0x0B83, egg_grenade=0x0B84, egg_ice=0x0B82, egg_clock=0x09C5,
     feather_red=0x0B4A, feather_gold=0x0B4B, btn_start=0x0B60, jinjo=0x0BD0).items()}
+
+# Icons the game animates on its HUD: all their frames go in the .exp and play on the page
+ANIM = dict(jinjo=0x0BD0, glowbo=0x0BE8, jamjars=0x0BB4, clock=0x0B98, egg_blue=0x09D7, egg_fire=0x09C1,
+            egg_grenade=0x09C2, egg_ice=0x09C0, egg_clock=0x09C5, feather_red=0x0B4A, feather_gold=0x0B4B)
+anim = {k: sprite_frames(i) for k, i in ANIM.items()}
+FPS = 15
 
 # ---------------------------------------------------------------------------------------------
 # Drawing helpers (DS-style cards: textured fill, outline, 1px bevel, drop shadow)
@@ -330,12 +353,12 @@ def static_art(theme):
         plate = Image.new('RGBA', (CW - 8, 15), (0, 0, 0, 0))
         plate.putalpha(rmask(CW - 8, 15, 3).point(lambda v: v * 120 // 255))
         bg.alpha_composite(plate, (x + 4, y + CH - 19))                                # number plate
-        put(bg, ic[icon], x + CW // 2, y + 18, 'cc')
+        if icon not in anim: put(bg, ic[icon], x + CW // 2, y + 18, 'cc')
     card(bg, CX0, AY, GW - 2 * CX0, 24, strip, th["strip_f"], sunk=True, shadow=False)
     ov = Image.new('RGBA', (GW - 2 * CX0 - 4, 20), (0, 0, 0, 70)); bg.alpha_composite(ov, (CX0 + 2, AY + 2))
     for k, (name, icon) in enumerate(AMMO):
         x = CX0 + 4 + int(k * STEP)
-        put(bg, shrink(ic[icon], 17), x, AY + 12, 'lc')
+        if icon not in anim: put(bg, shrink(ic[icon], 17), x, AY + 12, 'lc')
     bg.alpha_composite(bright(tile(bar, GW, TABS), th["bar_f"]), (0, TY))
     d = ImageDraw.Draw(bg)
     d.line((0, TY, GW, TY), fill=(24, 12, 0, 255)); d.line((0, TY + 1, GW, TY + 1), fill=(255, 210, 150, 90))
@@ -360,6 +383,21 @@ for w in range(9):
     files["images/bg_%d.png" % w] = static_art(THEMES[w]); backs[str(w)] = "images/bg_%d.png" % w
 layers = [{"image": "images/bg_none.png", "x": 0, "y": 0},          # before the game runs
           {"pick": "world", "images": backs, "x": 0, "y": 0}]
+def frames_layer(icon, size, x, y, phase):
+    fr = anim[icon]
+    s = min(1, size / max(fr[0].size)) if size else 1
+    for f, im in enumerate(fr):
+        files["anim/%s_%d.png" % (icon, f)] = shrink(im, max(im.size) * s) if s < 1 else im
+    return {"frames": "anim/%s_{f}.png" % icon, "length": len(fr), "fps": FPS, "phase": phase,
+            "anchor": "center", "x": x, "y": y}
+for k, (name, icon) in enumerate(CARDS):
+    if icon in anim:
+        x = CX0 + (k % 4) * (CW + CG); y = CY0 + (k // 4) * (CH + CG)
+        layers.append(frames_layer(icon, 0, x + CW // 2, y + 18, k * 2))
+for k, (name, icon) in enumerate(AMMO):
+    x = CX0 + 4 + int(k * STEP)
+    w = shrink(ic[icon], 17).width
+    layers.append(frames_layer(icon, 17, x + w // 2, AY + 12, k * 3))
 for k, (name, icon) in enumerate(CARDS):
     x = CX0 + (k % 4) * (CW + CG); y = CY0 + (k // 4) * (CH + CG)
     cx, ny = x + CW // 2, y + CH - 19
@@ -400,7 +438,8 @@ manifest = {
     "match": {"header": "BANJO TOOIE", "country": "E"},
     "theme": {"background": "#2A1709"},
     "screen": {"title": "Banjo-Tooie"},
-    "pixel_screen": {"size": [GW, GH], "fill": "#2A1709", "layers": layers, "buttons": buttons},
+    "pixel_screen": {"size": [GW, GH], "fill": "#2A1709", "layers": layers, "buttons": buttons,
+                     "transition": {"value": "world", "style": "jigsaw", "ms": 850, "cols": 8, "rows": 7}},
     "values": values,
 }
 
@@ -458,6 +497,7 @@ if PREVIEW:
         if 'hide' in ly and truthy(ly['hide']): continue
         c = ly.get('anchor') == 'center'
         if 'image' in ly: draw(ly['image'], ly['x'], ly['y'], c)
+        elif 'frames' in ly: draw(ly['frames'].replace('{f}', str(int(ly['phase']) % ly['length'])), ly['x'], ly['y'], c)
         elif 'pick' in ly: draw(ly['images'].get(str(val(ly['pick'])), ly['images']['default']), ly['x'], ly['y'], c)
         elif 'number' in ly:
             s = str(val(ly['number']))

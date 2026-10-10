@@ -3,6 +3,12 @@
 Toda mudança no que o `.exp` mostra sobe a versão (`VERSION` em `make_banjotooie.py`). O emulador mostra
 essa versão na lista de expansões, então dá para saber qual está instalada.
 
+## 1.2
+- Ícones animados com os quadros do HUD do próprio jogo: Jinjo, Glowbo, Jamjars, relógio, os cinco
+  ovos e as duas penas.
+- Transição de quebra-cabeça ao trocar de mundo: a página nova cai em peças por cima da antiga.
+- Precisa do M64-DS exp-1.0.41 ou mais novo (camadas `frames` e `transition`).
+
 ## 1.1
 - Cada mundo tem o próprio visual, com texturas das fases dele (fundo, faixa do título, cartões e
   faixa de ovos): pedra dourada no Mayahem Temple, rocha e metal na Glitter Gulch Mine, estrelas e

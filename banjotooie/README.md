@@ -8,7 +8,7 @@ pip install pillow
 python3 make_banjotooie.py "Banjo-Tooie (USA).z64" banjotooie.exp [preview.png]
 ```
 
-Precisa de uma versão do M64-DS com páginas `pixel_screen`. Para ver a prévia de outro mundo, passe o
+Precisa do M64-DS **exp-1.0.41** ou mais novo (camadas animadas `frames` e `transition`). Para ver a prévia de outro mundo, passe o
 mapa em `PREVIEW_MAP` (por exemplo `PREVIEW_MAP=0xC7` para Glitter Gulch Mine).
 
 ## O que aparece na tela de baixo
@@ -19,6 +19,7 @@ no AYN Thor), sem suavizar.
 | Parte | O que mostra |
 |---|---|
 | Visual | cada mundo usa texturas das próprias fases (fundo, título, cartões, faixa); madeira na Isle o' Hags e antes do jogo |
+| Animação | ícones animados com os quadros do HUD do jogo; transição de quebra-cabeça ao trocar de mundo |
 | Cabeçalho | nome do mundo atual na fonte do título (Banjo-Tooie antes de entrar num mundo) |
 | 8 cartões | Jiggies, notas, Jinjos, Glowbos, páginas do Cheato, favos vazios e golpes do Jamjars **deste mundo**, e o tempo de jogo da sessão; o número fica verde quando o mundo está completo |
 | Faixa | ovos azuis, de fogo, granada, de gelo e Clockwork, penas vermelhas e douradas |
