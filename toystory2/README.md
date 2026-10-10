@@ -20,17 +20,22 @@ Tela de 248×216 ampliada 5× (1240×1080 no AYN Thor), sem suavizar.
 |---|---|
 | Cabeçalho | nome da fase na fonte de menu do jogo (duas linhas nos nomes longos), número da fase e o token girando |
 | Status | vidas, bateria (14 segmentos) e moedas de 50, com a moeda girando |
-| Cartões | os 5 tokens da fase: moedas do Hamm, a missão da fase (ovelhas, soldados, Little Tikes…), desafio, chefe e segredo, com os ícones do próprio jogo (sem texto) e um token girando embaixo de cada um; nas fases de chefe, um cartão de chefe com o token |
+| Cartões | os 5 tokens da fase: moedas do Hamm, a missão da fase (ovelhas, soldados, Little Tikes…), desafio, chefe e segredo, com os ícones do próprio jogo (sem texto); embaixo de cada um, o token fica escuro e parado até ser pego e depois gira; nas fases de chefe, um cartão de chefe com o token |
 | Dica | a dica do Hamm de onde ele está naquela fase (até duas linhas), com as palavras destacadas em amarelo como no jogo |
 
 ## Endereços (RAM do N64, Rev 1)
+
+O token é marcado pela rotina de pegar itens do jogo (`0x800216F4`): `byte[0x801E22A1 + fase] |= 1 << slot`.
+O slot 0 é sempre o do Hamm (todas as fases chamam a rotina dele com 0); o 4 fica no código do chefe; o 2 no
+da corrida/desafio; o 1 vem do diálogo da missão.
 
 | Endereço | O que é |
 |---|---|
 | `0x801EFBEC` | fase atual (u32, 1–15): o número que o jogo usa para carregar `pictures\lvlNNx.pic` |
 | `0x800BB556` | bateria (u16, cheia = 14) |
 | `0x800BB55A` | vidas (u16) |
-| `0x800BB55E` | moedas (u16) |
+| `0x800BB55E` | moedas (u16); o código do Hamm compara com 50 |
+| `0x801E22A1 + fase` | tokens da fase (u8): bit 0 moedas do Hamm, 1 missão, 2 desafio, 3 segredo/quebra-cabeça, 4 chefe |
 
 Vidas, bateria e moedas são os códigos GameShark públicos (`0x800BB10A`, `0x800BB106`, `0x800BB10E`) movidos
 `+0x450` para a Rev 1. O código do jogo confirma a bateria: soma 4 quando pega uma pilha, limita em 14 e
@@ -46,5 +51,5 @@ avisa quando está baixa.
 
 ## Ainda falta
 
-- Confirmar no aparelho os quatro endereços acima (segure a tela de baixo para salvar a memória).
-- Tokens pegos em cada cartão e o total de tokens: falta achar onde o jogo guarda isso.
+- Confirmar no aparelho os endereços acima (segure a tela de baixo para salvar a memória).
+- Nas fases de chefe, qual bit o jogo usa (a expansão acende o token com qualquer um dos 5).

@@ -17,10 +17,10 @@ How the ROM is laid out (worked out for this expansion):
   (a 4-bit page in slot N uses palette entries N*16..N*16+15). .fnt = glyph table + 16 colours + 4-bit glyphs.
 """
 import io, json, re, struct, sys, zipfile
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageEnhance
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.2"
+VERSION = "1.3"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'toystory2.exp'
@@ -230,9 +230,19 @@ def small(im, h=18):                              # half-size token for under ea
     w = max(1, round(im.width * h / im.height)); s2 = im.resize((w, h), Image.LANCZOS)
     a = s2.getchannel('A').point(lambda v: 255 if v >= 110 else 0); s2.putalpha(a); return s2
 for i, im in enumerate(TOKEN): files['anim/token_s_%d.png' % i] = small(im.crop(bb))
+def dark(im):                                     # token not collected yet: dark and still
+    g = ImageEnhance.Brightness(ImageEnhance.Color(im).enhance(0.0)).enhance(0.28); return g
+files['images/token_dark.png'] = dark(files['anim/token_0.png'])
+files['images/token_s_dark.png'] = dark(files['anim/token_s_0.png'])
 
-def icon(tpg, slot): return trim(tpg_page('level00\\%s.tpg' % tpg, slot).crop((0, 0, 32, 32)))
+def icon(tpg, slot, h=24):
+    im = trim(tpg_page('level00\\%s.tpg' % tpg, slot).crop((0, 0, 32, 32)))
+    if h and im.height > h:                       # smaller icons on the cards
+        im = im.resize((max(1, round(im.width * h / im.height)), h), Image.LANCZOS)
+        im.putalpha(im.getchannel('A').point(lambda v: 255 if v >= 110 else 0))
+    return im
 HAMM, RACE, SECRET = icon('levcomp1', 10), icon('levcomp1', 11), icon('levcomp1', 12)
+HAMM_BIG = icon('levcomp1', 10, None)
 
 # level -> (name, mission label, mission icon slot, boss label, boss icon slot) ; boss stages have no cards
 LEVELS = {
@@ -277,7 +287,7 @@ files['images/header.png'] = panel(HW, HH)
 files['images/status.png'] = panel(GW - 2 * M, SH)
 files['images/board.png'] = panel(GW - 2 * M, BH)
 files['images/hint.png'] = panel(GW - 2 * M, NH)
-files['images/hamm.png'] = HAMM
+files['images/hamm.png'] = HAMM_BIG
 SEGS, SEG = 14, 3                           # battery: 14 segments, 3 px apart
 seg_on = Image.new('RGBA', (SEG, 18)); ImageDraw.Draw(seg_on).rectangle((0, 0, 1, 17), fill=(120, 255, 60, 255))
 seg_off = Image.new('RGBA', (SEG * SEGS, 18))
@@ -289,7 +299,7 @@ CX0 = M + (GW - 2 * M - (5 * CW + 4 * CG)) // 2
 CH = BH - 12
 def card(ic):
     c = panel(CW, CH, fill=CARD, edge=CARD_EDGE, r=5, bw=1)
-    c.alpha_composite(ic, ((c.width - ic.width) // 2, 34 - ic.height))
+    c.alpha_composite(ic, ((c.width - ic.width) // 2, 30 - ic.height))
     return c
 
 NAME_W = HW - 8 - 64                        # name area (the right side holds LEVEL n and the token)
@@ -336,7 +346,21 @@ values = {
     "in_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k in LEVELS}, "default": 0},
     "card_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if v[1]}, "default": 0},
     "boss_stage": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if not v[1]}, "default": 0},
+    "zero": {"type": "const", "value": 0},
 }
+# Tokens: one byte per level at 0x801E22A1 + level; the game sets bit n when token slot n is collected
+# (0 Hamm's coins, 1 the mission, 2 the challenge, 3 the puzzle/secret, 4 the boss).
+TOKENS = "0x801E22A1"
+CARD_BITS = [0, 1, 2, 4, 3]
+for lv in LEVELS:
+    for b in range(5):
+        values["t%d_%d" % (lv, b)] = {"type": "flags", "addr": TOKENS, "bits": [(lv << 3) | b], "mode": "any"}
+    values["t%d_any" % lv] = {"type": "flags", "addr": TOKENS, "bits": [(lv << 3) | b for b in range(5)], "mode": "any"}
+for i, b in enumerate(CARD_BITS):
+    values["card%d" % i] = {"type": "select", "index": "level", "default": 0,
+                            "options": ["zero"] + [("t%d_%d" % (lv, b)) if LEVELS[lv][1] else "zero" for lv in range(1, 16)]}
+values["boss_token"] = {"type": "select", "index": "level", "default": 0,
+                        "options": ["zero"] + [("t%d_any" % lv) if not LEVELS[lv][1] else "zero" for lv in range(1, 16)]}
 
 # ------------------------------------------------------------------------------------------------
 # Page
@@ -359,10 +383,14 @@ L = [{"image": "images/bg.png", "x": 0, "y": 0},
      {"image": "images/of50.png", "x": GW - M - 47, "y": SY + 11},
      {"image": "images/board.png", "x": M, "y": BY},
      {"pick": "level", "images": boards, "x": M, "y": BY}]
-L += [{"frames": "anim/token_s_{f}.png", "length": len(TOKEN), "fps": 20, "phase": i * 6, "anchor": "center",
-       "x": CX0 + i * (CW + CG) + CW // 2, "y": BY + 6 + 46, "show": "card_level"} for i in range(5)]
-L += [{"frames": "anim/token_{f}.png", "length": len(TOKEN), "fps": 20, "phase": 8, "anchor": "center",
-       "x": GW // 2, "y": BY + 46, "show": "boss_stage"},
+for i in range(5):
+    cx, cy = CX0 + i * (CW + CG) + CW // 2, BY + 6 + 43
+    L += [{"image": "images/token_s_dark.png", "anchor": "center", "x": cx, "y": cy, "show": "card_level", "hide": "card%d" % i},
+          {"frames": "anim/token_s_{f}.png", "length": len(TOKEN), "fps": 20, "phase": i * 6, "anchor": "center",
+           "x": cx, "y": cy, "show": "card%d" % i}]
+L += [{"image": "images/token_dark.png", "anchor": "center", "x": GW // 2, "y": BY + 46, "show": "boss_stage", "hide": "boss_token"},
+      {"frames": "anim/token_{f}.png", "length": len(TOKEN), "fps": 20, "phase": 8, "anchor": "center",
+       "x": GW // 2, "y": BY + 46, "show": "boss_token"},
      {"image": "images/hint.png", "x": M, "y": NY},
      {"image": "images/hamm.png", "anchor": "center", "x": M + 22, "y": NY + NH // 2, "show": "in_level"},
      {"pick": "level", "images": hints, "x": M + 44, "y": NY + 2}]
@@ -398,9 +426,17 @@ if PREVIEW:
     import os
     mem = {"level": int(os.environ.get('PREVIEW_LEVEL', '1')), "battery": 9, "lives": 3, "coins": 37}
     frame = int(os.environ.get('PREVIEW_FRAME', '0'))
+    got = int(os.environ.get('PREVIEW_TOKENS', '0x12'), 16)       # this level's token byte (default: mission + boss)
     def val(k):
-        d = values[k]
-        if d["type"] == "lookup": return d["table"].get(str(val(d["value"])), d.get("default"))
+        d = values[k]; t = d["type"]
+        if t == "lookup": return d["table"].get(str(val(d["value"])), d.get("default"))
+        if t == "const": return d["value"]
+        if t == "select":
+            i = val(d["index"]); o = d["options"]
+            return val(o[i]) if isinstance(i, int) and 0 <= i < len(o) else d.get("default")
+        if t == "flags":
+            n = sum(1 for bit in d["bits"] if (bit >> 3) == mem["level"] and got >> (bit & 7) & 1)
+            return int(n > 0) if d.get("mode") == "any" else n
         return mem[k]
     GL = {'/': 'slash'}
     canvas = Image.new('RGBA', (GW, GH))
@@ -410,6 +446,7 @@ if PREVIEW:
         canvas.alpha_composite(im, (int(x), int(y)))
     for ly in L:
         if 'show' in ly and not val(ly['show']): continue
+        if 'hide' in ly and val(ly['hide']): continue
         c = ly.get('anchor') == 'center'
         if 'image' in ly: draw(ly['image'], ly['x'], ly['y'], c)
         elif 'frames' in ly: draw(ly['frames'].replace('{f}', str((frame + ly['phase']) % ly['length'])), ly['x'], ly['y'], c)
