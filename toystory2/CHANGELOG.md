@@ -3,6 +3,9 @@
 Toda mudança no que o `.exp` mostra sobe a versão (`VERSION` em `make_toystory2.py`). O emulador mostra
 essa versão na lista de expansões, então dá para saber qual está instalada.
 
+## 1.5
+- O script acha sozinho, no código da ROM, a tabela de arquivos e os endereços (fase, tokens, bateria, vidas, moedas, buffer da imagem), então funciona com a ROM USA original (Rev 0) e com a Rev 1. Para a Rev 1 o `.exp` sai igual ao da 1.4.
+
 ## 1.4
 - Telas de baixo para fora das fases, cada uma seguindo a imagem da tela de cima: textos legais e logos de abertura (Activision, Disney Interactive, Traveller's Tales, o que está na tela acende), título com "PRESS START" piscando, menu principal, opções na moldura do Etch A Sketch com a fonte de rabisco do jogo, e a tela dos 50 tokens com o token girando.
 - Fade entre as páginas quando a tela ou a fase muda.

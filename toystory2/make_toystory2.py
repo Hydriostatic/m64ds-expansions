@@ -20,7 +20,7 @@ import io, json, re, struct, sys, zipfile
 from PIL import Image, ImageDraw, ImageEnhance
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.4"
+VERSION = "1.5"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'toystory2.exp'
@@ -31,14 +31,60 @@ if rom[:4] == b'\x37\x80\x40\x12':                      # .v64 (byte-swapped) ->
     rom = b''.join(rom[i + 1:i + 2] + rom[i:i + 1] for i in range(0, len(rom), 2))
 if rom[0x3B:0x3F] != b'NTHE':
     sys.exit('This is not Toy Story 2 (USA): game id %r' % rom[0x3B:0x3F])
-if rom[0x3F] != 1:
-    print('warning: this ROM is not Rev 1; the memory addresses in this expansion are for Rev 1')
+REV = rom[0x3F]
+print('ROM: Toy Story 2 (USA) %s' % ('Rev %d' % REV if REV else 'Rev 0 (first release)'))
+
+# ------------------------------------------------------------------------------------------------
+# Addresses are found in the ROM's own code, so the script works for every revision (Rev 0, Rev 1).
+# Main code: ROM 0x1000 loaded at the header's entry point.
+# ------------------------------------------------------------------------------------------------
+_ENTRY = struct.unpack('>I', rom[8:12])[0]
+_W = struct.unpack('>%dI' % (0x100000 // 4), rom[0x1000:0x101000])
+def _find(pattern):
+    """pattern: words, '?' nibbles are wildcards. Returns the list of matching word indexes."""
+    pv = [(int(p.replace('?', '0'), 16), int(''.join('0' if c == '?' else 'f' for c in p), 16)) for p in pattern.split()]
+    first_v, first_m = pv[0]; out = []
+    for i in range(len(_W) - len(pv)):
+        if _W[i] & first_m == first_v and all(_W[i + j] & m == v for j, (v, m) in enumerate(pv)): out.append(i)
+    return out
+def _hilo(i, j):
+    lo = _W[j] & 0xffff
+    return ((_W[i] & 0xffff) << 16) + (lo - 0x10000 if lo & 0x8000 else lo) & 0xffffffff
+def _one(name, pattern):
+    hits = _find(pattern)
+    if len(hits) != 1: sys.exit('could not find the %s code in this ROM (%d matches)' % (name, len(hits)))
+    return hits[0]
+# token pickup: level = [lui a0/lw a0], tokens byte = [lui v0/addiu v0]; byte[tokens + level] |= 1 << slot
+i = _one('token pickup', '3c04???? 8c84???? 00c21021 24030002 ac430000 2502000c 00c21021 ac400000 '
+                         '3c02???? 2442???? 00822021 90820000 24080001 00a81804 00431025 a0820000')
+ADDR_LEVEL, ADDR_TOKENS = _hilo(i, i + 1), _hilo(i + 8, i + 9)
+# battery pickup: battery += 4, capped at 14; lives and coins follow it in the same block
+i = _one('battery pickup', '3c02???? 9442???? 240800b4 3c01???? a428???? 24420004 3c01???? a422???? 00021400 00021403 2842000f')
+ADDR_BATTERY = _hilo(i, i + 1); ADDR_LIVES = ADDR_BATTERY + 4; ADDR_COINS = ADDR_BATTERY + 8
+coin_checks = [_hilo(k, k + 1) for k in _find('3c02???? 8442???? 28420032')]           # Hamm: coins < 50 ?
+if ADDR_COINS not in coin_checks: sys.exit('coins address check failed')
+# picture loader: the buffer pointer it loads pictures into
+i = _one('picture loader', '27bdffa0 afb00050 00808021 afb10054 3c11???? 8e31????')
+ADDR_PICBUF = _hilo(i + 4, i + 5)
+print('addresses: level %08X tokens %08X battery %08X lives %08X coins %08X picture buffer %08X'
+      % (ADDR_LEVEL, ADDR_TOKENS, ADDR_BATTERY, ADDR_LIVES, ADDR_COINS, ADDR_PICBUF))
 
 # ------------------------------------------------------------------------------------------------
 # Files
 # ------------------------------------------------------------------------------------------------
+def _chain(p):
+    n = 0
+    while True:
+        m = re.match(rb'([ -~]{3,40})\x00', rom[p:p + 48])
+        if not m: return n, p
+        q = (p + len(m.group(1)) + 1 + 3) & ~3
+        size, zero = struct.unpack('>II', rom[q:q + 8])
+        if zero or size > 0x200000: return n, p
+        n += 1; p = q + 8
+_cands = [m.start() for m in re.finditer(re.escape(b'tunes\\ts2.ptr\x00'), rom[:0x200000])]   # an early table entry
+_start = max((a for c in _cands for a in range(c - 0x40, c + 4, 4)), key=lambda a: _chain(a)[0])
 FILES = {}
-p, data = 0xD8E78, 0xDC380
+p, data = _start, (_chain(_start)[1] + 7) & ~7
 while True:
     m = re.match(rb'([ -~]{3,40})\x00', rom[p:p + 48])
     if not m: break
@@ -46,6 +92,7 @@ while True:
     size, zero = struct.unpack('>II', rom[q:q + 8])
     if zero or size > 0x200000: break
     FILES[name] = (data, size); data += (size + 7) & ~7; p = q + 8
+if rom[FILES['chars\\buzz.all'][0]:][:3] != b'RNC': sys.exit('file table not found')
 
 def rnc1(src, off):
     usize = struct.unpack('>I', src[off + 4:off + 8])[0]
@@ -421,15 +468,15 @@ for name in FILES:
 # number the game uses to load the level's title card (pictures\\lvlNNx.pic).
 # ------------------------------------------------------------------------------------------------
 values = {
-    "level":   {"type": "u32", "addr": "0x801EFBEC"},
-    "battery": {"type": "u16", "addr": "0x800BB556"},
-    "lives":   {"type": "u16", "addr": "0x800BB55A"},
-    "coins":   {"type": "u16", "addr": "0x800BB55E"},
+    "level":   {"type": "u32", "addr": "0x%08X" % ADDR_LEVEL},
+    "battery": {"type": "u16", "addr": "0x%08X" % ADDR_BATTERY},
+    "lives":   {"type": "u16", "addr": "0x%08X" % ADDR_LIVES},
+    "coins":   {"type": "u16", "addr": "0x%08X" % ADDR_COINS},
     "in_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k in LEVELS}, "default": 0},
     "card_level": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if v[1]}, "default": 0},
     "boss_stage": {"type": "lookup", "value": "level", "table": {str(k): 1 for k, v in LEVELS.items() if not v[1]}, "default": 0},
     "zero": {"type": "const", "value": 0},
-    "picture": {"type": "u32", "ptr": "0x801E3454", "offset": 16},
+    "picture": {"type": "u32", "ptr": "0x%08X" % ADDR_PICBUF, "offset": 16},
     "screen": {"type": "lookup", "value": "picture", "table": SIG, "default": 1, "keep_last": True},
     "fe_title": {"type": "lookup", "value": "screen", "table": {"5": 1}, "default": 0},
     "fe_all": {"type": "lookup", "value": "screen", "table": {"8": 1}, "default": 0},
@@ -437,7 +484,7 @@ values = {
 }
 # Tokens: one byte per level at 0x801E22A1 + level; the game sets bit n when token slot n is collected
 # (0 Hamm's coins, 1 the mission, 2 the challenge, 3 the puzzle/secret, 4 the boss).
-TOKENS = "0x801E22A1"
+TOKENS = "0x%08X" % ADDR_TOKENS
 CARD_BITS = [0, 1, 2, 4, 3]
 for lv in LEVELS:
     for b in range(5):
@@ -494,7 +541,7 @@ manifest = {
     "format": 1,
     "id": "toystory2-usa",
     "name": "Toy Story 2",
-    "game": "Toy Story 2: Buzz Lightyear to the Rescue! (USA) (Rev 1)",
+    "game": "Toy Story 2: Buzz Lightyear to the Rescue! (USA)" + (" (Rev %d)" % REV if REV else ""),
     "version": VERSION,
     "author": "Hydriostatic",
     "match": {"header": "Toy Story 2", "country": "E"},

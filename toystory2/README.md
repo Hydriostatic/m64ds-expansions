@@ -1,6 +1,6 @@
-# Toy Story 2: Buzz Lightyear to the Rescue! (USA, Rev 1)
+# Toy Story 2: Buzz Lightyear to the Rescue! (USA)
 
-`make_toystory2.py` monta o `toystory2.exp` a partir da sua ROM (`.z64` ou `.v64`, USA Rev 1). Toda a arte
+`make_toystory2.py` monta o `toystory2.exp` a partir da sua ROM (`.z64` ou `.v64`, USA, Rev 0 ou Rev 1). Toda a arte
 sai da própria ROM: a fonte de menu do jogo (`psxfont`) para o nome da fase, a fonte pequena (`tahoma08`),
 os sprites do HUD, os ícones da tela de fase completa e o token da Pizza Planet girando.
 
@@ -24,7 +24,10 @@ Tela de 248×216 ampliada 5× (1240×1080 no AYN Thor), sem suavizar.
 | Fora das fases | uma página para cada imagem da tela de cima: textos legais e logos de abertura (o logo que está na tela acende), título com "PRESS START" piscando, menu principal, opções na moldura do Etch A Sketch e a tela dos 50 tokens; fade ao trocar |
 | Dica | a dica do Hamm de onde ele está naquela fase (até duas linhas), com as palavras destacadas em amarelo como no jogo |
 
-## Endereços (RAM do N64, Rev 1)
+## Endereços (RAM do N64)
+
+O script não usa endereços fixos: ele acha no código da sua ROM a rotina de pegar token, a de pegar pilha,
+a checagem das 50 moedas do Hamm e o carregador de imagens, e lê os endereços de lá. Os valores abaixo são os da Rev 1.
 
 O token é marcado pela rotina de pegar itens do jogo (`0x800216F4`): `byte[0x801E22A1 + fase] |= 1 << slot`.
 O slot 0 é sempre o do Hamm (todas as fases chamam a rotina dele com 0); o 4 fica no código do chefe; o 2 no
