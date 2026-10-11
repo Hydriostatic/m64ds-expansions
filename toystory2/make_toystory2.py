@@ -20,7 +20,7 @@ import io, json, re, struct, sys, zipfile
 from PIL import Image, ImageDraw, ImageEnhance
 
 # Bump on every change to what the .exp shows (history in CHANGELOG.md).
-VERSION = "1.5"
+VERSION = "1.6"
 
 ROM_PATH = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'toystory2.exp'
@@ -92,7 +92,7 @@ while True:
     size, zero = struct.unpack('>II', rom[q:q + 8])
     if zero or size > 0x200000: break
     FILES[name] = (data, size); data += (size + 7) & ~7; p = q + 8
-if rom[FILES['chars\\buzz.all'][0]:][:3] != b'RNC': sys.exit('file table not found')
+if sum(rom[o:o + 4] == b'RNC\x01' for o, _ in FILES.values()) < 200: sys.exit('file table not found')
 
 def rnc1(src, off):
     usize = struct.unpack('>I', src[off + 4:off + 8])[0]
@@ -302,8 +302,34 @@ def icon(tpg, slot, h=24):
         im = im.resize((max(1, round(im.width * h / im.height)), h), Image.LANCZOS)
         im.putalpha(im.getchannel('A').point(lambda v: 255 if v >= 110 else 0))
     return im
-HAMM, RACE, SECRET = icon('levcomp1', 10), icon('levcomp1', 11), icon('levcomp1', 12)
-HAMM_BIG = icon('levcomp1', 10, None)
+def shrink(im, h=24):
+    if im.height > h:
+        im = im.resize((max(1, round(im.width * h / im.height)), h), Image.LANCZOS)
+        im.putalpha(im.getchannel('A').point(lambda v: 255 if v >= 110 else 0))
+    return im
+HAS_ICONS = 'level00\\levcomp1.tpg' in FILES           # the level-complete icons only exist in Rev 1
+if HAS_ICONS:
+    HAMM, RACE, SECRET = icon('levcomp1', 10), icon('levcomp1', 11), icon('levcomp1', 12)
+    HAMM_BIG = icon('levcomp1', 10, None)
+    def mission_icon(slot, label): return icon('levcomp1', slot)
+    def boss_icon(slot): return icon('levcomp2', slot)
+else:                                                   # Rev 0: the closest art it has
+    _fx = lambda p, box: trim(tpg_page('fx\\toyfx00.tpg', p).crop(box))
+    HAMM_BIG = _fx(11, (0, 0, 64, 64)); HAMM = shrink(HAMM_BIG)
+    RACE = shrink(_fx(8, (0, 0, 32, 32)))
+    _big = {}
+    for _pg, _rows in {1: ['ABCD', 'MNOP', 'YZ01', '.,;:'], 2: ['EFGH', 'QRST', '2345', "\\/'!"], 3: ['IJKL', 'UVWX', '6789', "?()'"]}.items():
+        _im = tpg_page('level16\\levnum3.tpg', _pg)
+        for _r, _row in enumerate(_rows):
+            for _c, _ch in enumerate(_row): _big[_ch] = trim(_im.crop((_c * 16, _r * 16, _c * 16 + 16, _r * 16 + 16)))
+    SECRET = _big['?'].resize((_big['?'].width * 3 // 2, _big['?'].height * 3 // 2), Image.NEAREST)
+    _cross = shrink(_fx(2, (32, 32, 64, 64)), 22)
+    def mission_icon(slot, label):
+        five, name = _big['5'], text(label, TAH, 3)
+        im = Image.new('RGBA', (max(five.width, name.width), five.height + name.height))
+        im.alpha_composite(five, ((im.width - five.width) // 2, 0)); im.alpha_composite(name, ((im.width - name.width) // 2, five.height))
+        return im
+    def boss_icon(slot): return _cross
 
 # level -> (name, mission label, mission icon slot, boss label, boss icon slot) ; boss stages have no cards
 LEVELS = {
@@ -380,7 +406,7 @@ for lv, (nm, mlab, mslot, blab, bslot) in LEVELS.items():
     files['names/%d.png' % lv] = head; names[str(lv)] = 'names/%d.png' % lv
     b = Image.new('RGBA', (GW - 2 * M, BH))
     if mlab:
-        cards = [HAMM, icon('levcomp1', mslot), RACE, icon('levcomp2', bslot), SECRET]
+        cards = [HAMM, mission_icon(mslot, mlab), RACE, boss_icon(bslot), SECRET]
         for i, ic in enumerate(cards): b.alpha_composite(card(ic), (CX0 - M + i * (CW + CG), 6))
     else:
         t = text('BOSS STAGE', PSX, 5); b.alpha_composite(t, ((b.width - t.width) // 2, 5))
@@ -407,7 +433,8 @@ PIC['frame'] = picture('level16\\surroun.pic')
 t = np.array(PIC['titlescr']).astype(int)
 mask = (np.abs(t[:, :, :3] - t[:, 2:3, :3]).sum(axis=2) > 60).astype(np.uint8) * 255   # background = one colour per row
 t[:, :, 3] = mask
-TS2LOGO = Image.fromarray(t.astype(np.uint8), 'RGBA').crop((104, 38, 203, 182))
+t[128:, 199:, 3] = 0                                    # Buzz's helmet next to the logo
+TS2LOGO = Image.fromarray(t.astype(np.uint8), 'RGBA').crop((102, 36, 216, 184))
 def starry():
     c = PIC['titlescr'].crop((2, 0, 3, 256)).resize((GW, GH), Image.BILINEAR); d = ImageDraw.Draw(c)
     import random; rnd = random.Random(4)

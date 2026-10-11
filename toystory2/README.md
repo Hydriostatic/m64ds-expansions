@@ -54,6 +54,13 @@ avisa quando está baixa.
 - `.tpg`: 16 códigos de página + paleta de 256 cores RGBA5551 + páginas (página de 4 bits no slot N usa as
   cores N×16…N×16+15). `.pic`: paleta + CI8 em blocos de 64×32. `.fnt`: tabela de glifos + 16 cores + glifos de 4 bits.
 
+## Rev 0 x Rev 1
+
+A Rev 0 (primeira versão USA) não tem os ícones da tela de fase completa (`level00\levcomp1.tpg` e `levcomp2.tpg`).
+Nela os cartões usam peças do HUD: o Hamm, a bandeira quadriculada, a mira para o chefe, um "5" com o nome dos
+itens da missão e um "?" na fonte da seleção de fases. Endereços da Rev 0: fase `0x801F0714`, tokens `0x801E2DD1`,
+bateria `0x800BB106` (o mesmo do código GameShark), vidas `0x800BB10A`, moedas `0x800BB10E`, buffer da imagem `0x801E3F84`.
+
 ## Ainda falta
 
 - Confirmar no aparelho os endereços acima (segure a tela de baixo para salvar a memória).

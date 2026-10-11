@@ -3,6 +3,10 @@
 Toda mudança no que o `.exp` mostra sobe a versão (`VERSION` em `make_toystory2.py`). O emulador mostra
 essa versão na lista de expansões, então dá para saber qual está instalada.
 
+## 1.6
+- ROM USA original (Rev 0): ela não tem os ícones da tela de fase completa (`levcomp1`/`levcomp2`, que só existem na Rev 1). Nos cartões entram peças do HUD do próprio jogo: Hamm, bandeira quadriculada, a mira (chefe), um "5" com o nome dos itens (missão) e um "?" na fonte da seleção de fases. Na Rev 1 nada muda.
+- Logo do Toy Story 2 inteiro na página de abertura.
+
 ## 1.5
 - O script acha sozinho, no código da ROM, a tabela de arquivos e os endereços (fase, tokens, bateria, vidas, moedas, buffer da imagem), então funciona com a ROM USA original (Rev 0) e com a Rev 1. Para a Rev 1 o `.exp` sai igual ao da 1.4.
 
